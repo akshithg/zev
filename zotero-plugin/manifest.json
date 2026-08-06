@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "Zev Bridge",
+  "version": "0.1.0",
+  "description": "Evaluates JavaScript inside Zotero, over a loopback HTTP endpoint on port 24119.",
+  "applications": {
+    "zotero": {
+      "id": "zev-bridge@zev.dev",
+      "update_url": "https://github.com/akshithg/zev/releases/latest/download/zev-bridge-updates.json",
+      "strict_min_version": "7.0",
+      "strict_max_version": "9.*"
+    }
+  },
+  "author": "zev"
+}

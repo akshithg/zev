@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zev"
+version = "0.1.0"
+description = "Evaluate JavaScript inside a running Zotero, for AI agents"
+requires-python = ">=3.10"
+dependencies = []
+license = "MIT"
+readme = "README.md"
+authors = [{name = "Akshith Gunasekaran"}]
+maintainers = [{name = "Akshith Gunasekaran"}]
+keywords = ["zotero", "javascript", "ai", "research"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/akshithg/zev"
+Repository = "https://github.com/akshithg/zev"
+
+[project.scripts]
+zev = "zev.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zev"]
+exclude = ["/src/zev/assets/zev-bridge.xpi"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"zotero-plugin/dist/zev-bridge.xpi" = "zev/assets/zev-bridge.xpi"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+
+    "/zotero-plugin",
+    "/README.md",
+    "/LICENSE",
+    "/Makefile",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# Line length is left to the formatter; embedded JS templates and tool
+# descriptions intentionally run past 120 where wrapping hurts readability.
+ignore = ["E501"]
+
+[tool.ty.environment]
+python-version = "3.10"
+root = ["./src"]
+
+# Tests use duck-typed mocks and reach into Optional module globals that are
+# non-None at runtime; type-check src strictly but relax those rules for tests.
+[[tool.ty.overrides]]
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+not-subscriptable = "ignore"

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "ruff==0.15.1" "ty==0.0.17"
+      # Install the package so ty can resolve third-party imports (mcp, pyzotero, bm25s).
+      - run: python -m pip install .
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: ty check src
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install build .
+      - run: make build
+      - run: git diff --exit-code -- zotero-plugin/dist/zoty-bridge.xpi zotero-plugin/dist/zoty-bridge-updates.json src/zoty/assets/zoty-bridge.xpi
+      - run: python -m compileall src scripts tests
+      - run: make test
+      - run: python -m build --wheel
+      - run: python scripts/verify_wheel_xpi.py dist/*.whl
