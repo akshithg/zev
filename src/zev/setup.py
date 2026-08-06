@@ -18,7 +18,6 @@ from typing import Any
 
 BRIDGE_ADDON_ID = "zev-bridge@zev.dev"
 BRIDGE_ENDPOINT = "http://127.0.0.1:24119/status"
-LATEST_UPDATE_MANIFEST_URL = "https://github.com/akshithg/zev/releases/latest/download/zev-bridge-updates.json"
 LOCAL_API_ENDPOINT = "http://127.0.0.1:23119/connector/ping"
 
 
@@ -36,7 +35,6 @@ class DoctorResult:
     package_version: str
     bundled_bridge_version: str | None
     installed_bridge_version: str | None
-    latest_bridge_version: str | None
 
     @property
     def ready(self) -> bool:
@@ -81,24 +79,6 @@ def bridge_version_from_xpi(path: Path) -> str | None:
 
     version = manifest.get("version")
     return str(version) if version else None
-
-
-def parse_latest_bridge_version(update_manifest: dict[str, Any]) -> str | None:
-    updates = update_manifest.get("addons", {}).get(BRIDGE_ADDON_ID, {}).get("updates", [])
-    versions = [str(update["version"]) for update in updates if update.get("version")]
-    return max(versions, key=_version_key) if versions else None
-
-
-def fetch_latest_update_manifest(timeout: float = 2.0) -> dict[str, Any] | None:
-    request = urllib.request.Request(
-        LATEST_UPDATE_MANIFEST_URL,
-        headers={"User-Agent": f"zev/{package_version()}"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
-        return None
 
 
 def zotero_profile_root() -> Path:
@@ -164,11 +144,43 @@ def http_json(url: str, timeout: float = 1.0) -> tuple[bool, Any]:
         return True, body
 
 
+def quit_zotero(timeout: float = 45.0) -> bool:
+    """Ask Zotero to quit and wait for it to exit. macOS only."""
+    if platform.system() != "Darwin":
+        raise RuntimeError("Automatic restart is macOS-only; quit Zotero yourself and drop --restart.")
+    if not is_zotero_running():
+        return True
+
+    subprocess.run(["osascript", "-e", 'quit app "Zotero"'], check=False, capture_output=True)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_zotero_running():
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def launch_zotero() -> None:
+    if platform.system() != "Darwin":
+        raise RuntimeError("Automatic restart is macOS-only; start Zotero yourself.")
+    subprocess.run(["open", "-a", "Zotero"], check=False)
+
+
+def wait_for_bridge(timeout: float = 90.0) -> str | None:
+    """Poll until the bridge answers. Plugin startup lags Zotero's by ~20s."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ok, payload = http_json(BRIDGE_ENDPOINT)
+        if ok:
+            return _bridge_payload_version(payload) or "unknown"
+        time.sleep(2.0)
+    return None
+
+
 def run_doctor(no_network: bool = False) -> DoctorResult:
     version = package_version()
     xpi_path = bundled_xpi_path()
     bundled_version = bridge_version_from_xpi(xpi_path) if xpi_path else None
-    latest_version = None
     checks: list[CheckResult] = []
 
     if xpi_path and bundled_version:
@@ -184,16 +196,6 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
                 "Reinstall or upgrade zev; the wheel should include zev-bridge.xpi.",
             )
         )
-
-    if no_network:
-        checks.append(CheckResult("Latest bridge", True, "skipped (--no-network)"))
-    else:
-        manifest = fetch_latest_update_manifest()
-        latest_version = parse_latest_bridge_version(manifest) if manifest else None
-        if latest_version:
-            checks.append(CheckResult("Latest bridge", True, latest_version))
-        else:
-            checks.append(CheckResult("Latest bridge", True, "unavailable; continuing with bundled bridge"))
 
     profile = discover_default_profile()
     if profile:
@@ -225,13 +227,16 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
     installed_version = _bridge_payload_version(bridge_payload) if bridge_ok else None
     if bridge_ok:
         detail = f"ok, version {installed_version}" if installed_version else "ok"
-        if installed_version and latest_version and compare_versions(installed_version, latest_version) < 0:
+        # The bundled XPI is the newest build we have; a running bridge older
+        # than it means the plugin was rebuilt but never reinstalled, which
+        # otherwise fails silently as "my fix didn't take effect".
+        if installed_version and bundled_version and compare_versions(installed_version, bundled_version) < 0:
             checks.append(
                 CheckResult(
                     "zev-bridge",
                     False,
-                    f"{detail}; latest is {latest_version}",
-                    "Run `zev setup` to install or upgrade zev-bridge.xpi.",
+                    f"{detail}; bundled build is {bundled_version}",
+                    "Run `zev setup --install-profile --restart` to install the newer bridge.",
                 )
             )
         else:
@@ -242,7 +247,7 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
                 "zev-bridge",
                 False,
                 f"not reachable at {BRIDGE_ENDPOINT}: {bridge_payload}",
-                "Run `zev setup` or install zev-bridge.xpi from the latest GitHub release via Zotero Tools -> Plugins.",
+                "Run `zev setup --install-profile --restart`.",
             )
         )
 
@@ -251,7 +256,6 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
         package_version=version,
         bundled_bridge_version=bundled_version,
         installed_bridge_version=installed_version,
-        latest_bridge_version=latest_version,
     )
 
 
@@ -264,6 +268,21 @@ def format_doctor(result: DoctorResult) -> str:
             lines.append(f"Next: {check.action}")
     lines.append(f"Status: {'ready' if result.ready else 'setup incomplete'}")
     return "\n".join(lines)
+
+
+def is_addon_registered(profile_path: Path, addon_id: str = BRIDGE_ADDON_ID) -> bool:
+    """Whether Zotero already knows this addon id.
+
+    Zotero is Firefox-based, and Firefox no longer auto-installs sideloaded
+    XPIs (`extensions.autoDisableScopes` defaults to 15). Dropping a file into
+    `extensions/` therefore only works as an in-place upgrade of an addon that
+    is already registered; a brand new id must be installed through the UI.
+    """
+    try:
+        data = json.loads((profile_path / "extensions.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return any(addon.get("id") == addon_id for addon in data.get("addons", []))
 
 
 def install_bridge_into_profile(xpi_path: Path, profile_path: Path | None = None) -> Path:

@@ -25,21 +25,6 @@ class SetupHelperTests(unittest.TestCase):
 
             self.assertEqual(setup.bridge_version_from_xpi(xpi_path), "9.8.7")
 
-    def test_parse_latest_bridge_version_uses_highest_manifest_update(self):
-        manifest = {
-            "addons": {
-                setup.BRIDGE_ADDON_ID: {
-                    "updates": [
-                        {"version": "0.2.1"},
-                        {"version": "0.2.3"},
-                        {"version": "0.2.2"},
-                    ]
-                }
-            }
-        }
-
-        self.assertEqual(setup.parse_latest_bridge_version(manifest), "0.2.3")
-
     def test_compare_versions(self):
         self.assertLess(setup.compare_versions("0.2.1", "0.2.2"), 0)
         self.assertEqual(setup.compare_versions("0.2.2", "0.2.2"), 0)
@@ -107,7 +92,7 @@ class SetupHelperTests(unittest.TestCase):
             patch.object(setup, "discover_default_profile", return_value=Path("/tmp/zotero-profile")),
             patch.object(setup, "http_json", side_effect=fake_http_json),
         ):
-            result = setup.run_doctor(no_network=True)
+            result = setup.run_doctor()
 
         self.assertTrue(result.ready)
         self.assertEqual(result.installed_bridge_version, "0.2.2")
@@ -115,3 +100,47 @@ class SetupHelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleBridgeTests(unittest.TestCase):
+    def test_running_bridge_older_than_bundled_build_is_flagged(self):
+        with (
+            patch.object(setup, "bundled_xpi_path", return_value=Path("/tmp/zev-bridge.xpi")),
+            patch.object(setup, "bridge_version_from_xpi", return_value="0.2.0"),
+            patch.object(setup, "discover_default_profile", return_value=Path("/tmp/profile")),
+            patch.object(setup, "http_json", return_value=(True, {"status": "ok", "version": "0.1.0"})),
+        ):
+            result = setup.run_doctor()
+
+        bridge = next(c for c in result.checks if c.name == "zev-bridge")
+        self.assertFalse(bridge.ok)
+        self.assertIn("bundled build is 0.2.0", bridge.detail)
+        self.assertFalse(result.ready)
+
+    def test_matching_versions_are_clean(self):
+        with (
+            patch.object(setup, "bundled_xpi_path", return_value=Path("/tmp/zev-bridge.xpi")),
+            patch.object(setup, "bridge_version_from_xpi", return_value="0.1.0"),
+            patch.object(setup, "discover_default_profile", return_value=Path("/tmp/profile")),
+            patch.object(setup, "http_json", return_value=(True, {"status": "ok", "version": "0.1.0"})),
+        ):
+            result = setup.run_doctor()
+
+        bridge = next(c for c in result.checks if c.name == "zev-bridge")
+        self.assertTrue(bridge.ok)
+        self.assertTrue(result.ready)
+
+
+class AddonRegistrationTests(unittest.TestCase):
+    def test_detects_registered_and_unregistered_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp)
+            (profile / "extensions.json").write_text(
+                json.dumps({"addons": [{"id": "zev-bridge@zev.dev", "version": "0.1.0"}]})
+            )
+            self.assertTrue(setup.is_addon_registered(profile))
+            self.assertFalse(setup.is_addon_registered(profile, "other@example.com"))
+
+    def test_missing_extensions_json_is_not_registered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(setup.is_addon_registered(Path(tmp)))

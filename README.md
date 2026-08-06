@@ -29,8 +29,18 @@ never writes to it.
 
 ```console
 uv tool install zev
-zev setup --install-profile   # Zotero must be closed
-zev doctor                    # verify after restarting Zotero
+zev setup --download-only     # prints the bundled XPI path
+```
+
+Install that XPI **once** through Zotero: *Tools > Plugins > gear >
+Install Add-on From File*. Zotero is Firefox-based and Firefox no longer
+auto-installs sideloaded add-ons, so a first install has to go through the UI.
+
+After that, upgrades are one command:
+
+```console
+zev setup --install-profile --restart   # quits Zotero, installs, relaunches, waits
+zev doctor
 ```
 
 The bridge is a small Zotero plugin that listens on `127.0.0.1:24119` and
@@ -84,3 +94,25 @@ ruff check . && ruff format .
 ```
 
 No runtime dependencies.
+
+## Credits
+
+zev is derived from [**zoty**](https://github.com/eric-tramel/zoty) by
+**Eric Tramel**, MIT licensed. That is not a footnote — most of what makes this
+work is his:
+
+- **`zotero-plugin/bootstrap.js`** — the bridge itself. The `nsIServerSocket`
+  listener and the privileged-eval wrapper are the reason any of this is
+  possible, and they are Eric's design. This repo changed the response encoding
+  and little else.
+- **`src/zev/setup.py`** — profile discovery, XPI inspection, and the install
+  and diagnostics flow.
+- **`src/zev/bridge.py`** — the HTTP client for the bridge endpoint.
+- **`scripts/build_zotero_plugin.py`**, the `Makefile`, and the release
+  tooling.
+
+What this fork changed: removed the search index, MCP server, citation tools,
+and canned mutation tools in favour of a single `eval` primitive; fixed UTF-8
+encoding in the bridge response path; added automated install-and-restart.
+
+Reading and analysis moved to a separate project, `ken`.

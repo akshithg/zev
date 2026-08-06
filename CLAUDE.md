@@ -51,6 +51,12 @@ Other things that bite:
   reversible. Identifier-free items (webpages, repos, some conference papers)
   are exactly where automated metadata tools attach the wrong paper.
 
+- **A new plugin id cannot be sideloaded.** Copying an XPI into
+  `profile/extensions/` only upgrades an addon Zotero already registered;
+  `extensions.autoDisableScopes` defaults to 15, so a first install must go
+  through Tools > Plugins. `zev setup --install-profile` refuses when the id is
+  unregistered rather than quitting Zotero for an install that cannot work.
+
 ## Dev
 
 - Python 3.10+ (3.13 recommended) via `uv`. No runtime dependencies.
