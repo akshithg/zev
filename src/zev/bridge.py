@@ -37,21 +37,34 @@ def execute_js(
     req = urllib.request.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Zev-Client": "1"},
         method="POST",
     )
 
+    uncertain = "JavaScript may still be running or have completed. Verify the affected state before retrying."
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            with e:
+                rejection = json.loads(e.read(4096).decode("utf-8"))
+            if isinstance(rejection, dict) and isinstance(rejection.get("error"), str):
+                detail = ": " + rejection["error"]
+        except (ValueError, OSError):
+            pass
+        raise BridgeError(f"Bridge request rejected: HTTP {e.code}{detail}") from e
+    except TimeoutError as e:
+        raise BridgeError(f"Bridge request timed out. {uncertain}") from e
     except urllib.error.URLError as e:
         if "Connection refused" in str(e):
             raise BridgeError(
                 f"Cannot connect to zev-bridge at {host}:{port}. Is Zotero running with the Zev Bridge plugin?"
             ) from e
-        raise BridgeError(f"Bridge request failed: {e}") from e
+        raise BridgeError(f"Bridge request failed: {e}. {uncertain}") from e
     except Exception as e:
-        raise BridgeError(f"Bridge request failed: {e}") from e
+        raise BridgeError(f"Bridge request failed: {e}. {uncertain}") from e
 
     if not body.get("ok"):
         raise BridgeError(f"JS evaluation error: {body.get('error', 'unknown')}")

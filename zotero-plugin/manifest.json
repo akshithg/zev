@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zev Bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Evaluates JavaScript inside Zotero, over a loopback HTTP endpoint on port 24119.",
   "applications": {
     "zotero": {
