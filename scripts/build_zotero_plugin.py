@@ -28,6 +28,7 @@ DIST_DIR = PLUGIN_DIR / "dist"
 MANIFEST_PATH = PLUGIN_DIR / "manifest.json"
 BOOTSTRAP_PATH = PLUGIN_DIR / "bootstrap.js"
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
+LICENSE_PATH = REPO_ROOT / "LICENSE"
 BUNDLED_XPI_PATH = REPO_ROOT / "src/zev/assets/zev-bridge.xpi"
 
 PLUGIN_ID = "zev-bridge@zev.dev"
@@ -143,7 +144,7 @@ def _validate_manifest(manifest: dict[str, Any]) -> None:
 
 def _write_xpi(path: Path) -> None:
     with zipfile.ZipFile(path, "w") as archive:
-        for source in (MANIFEST_PATH, BOOTSTRAP_PATH):
+        for source in (MANIFEST_PATH, BOOTSTRAP_PATH, LICENSE_PATH):
             info = zipfile.ZipInfo(source.name, ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
