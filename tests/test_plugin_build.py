@@ -29,12 +29,34 @@ class PluginBuildTests(unittest.TestCase):
 
     def build(self):
         result = subprocess.run(
-            [sys.executable, str(self.root / "scripts/build_zotero_plugin.py"), "--check-version-sync"],
+            [sys.executable, str(self.root / "scripts/build_zotero_plugin.py")],
             capture_output=True,
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return self.root / "zotero-plugin/dist/zev-bridge.xpi"
+
+    def test_plain_build_rejects_mismatched_versions(self):
+        project = self.root / "pyproject.toml"
+        project.write_text(project.read_text().replace('version = "', 'version = "999.'))
+        result = subprocess.run(
+            [sys.executable, str(self.root / "scripts/build_zotero_plugin.py")],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match Zotero bridge version", result.stderr)
+        self.assertFalse((self.root / "zotero-plugin/dist").exists())
+
+    def test_build_rejects_mismatched_release_tag(self):
+        result = subprocess.run(
+            [sys.executable, str(self.root / "scripts/build_zotero_plugin.py"), "--release-tag", "v999.0.0"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match bridge version", result.stderr)
+        self.assertFalse((self.root / "zotero-plugin/dist").exists())
 
     def test_license_is_preserved_in_standalone_and_bundled_xpi(self):
         standalone = self.build()

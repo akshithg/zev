@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import configparser
 import json
-import platform
-import shutil
-import subprocess
-import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -16,9 +11,7 @@ from importlib import metadata, resources
 from pathlib import Path
 from typing import Any
 
-BRIDGE_ADDON_ID = "zev-bridge@zev.dev"
 BRIDGE_ENDPOINT = "http://127.0.0.1:24119/status"
-LOCAL_API_ENDPOINT = "http://127.0.0.1:23119/connector/ping"
 
 
 @dataclass(frozen=True)
@@ -38,8 +31,7 @@ class DoctorResult:
 
     @property
     def ready(self) -> bool:
-        required = {"Zotero local API", "zev-bridge"}
-        return all(check.ok for check in self.checks if check.name in required)
+        return any(check.name == "zev-bridge" and check.ok for check in self.checks)
 
 
 def package_version() -> str:
@@ -81,103 +73,15 @@ def bridge_version_from_xpi(path: Path) -> str | None:
     return str(version) if version else None
 
 
-def zotero_profile_root() -> Path:
-    system = platform.system()
-    if system == "Darwin":
-        return Path.home() / "Library/Application Support/Zotero"
-    if system == "Windows":
-        return Path.home() / "AppData/Roaming/Zotero/Zotero"
-    return Path.home() / ".zotero/zotero"
-
-
-def discover_default_profile(root: Path | None = None) -> Path | None:
-    root = root or zotero_profile_root()
-    profiles_ini = root / "profiles.ini"
-    parser = configparser.ConfigParser()
-    if not parser.read(profiles_ini):
-        return None
-
-    fallback: Path | None = None
-    for section in parser.sections():
-        if not section.startswith("Profile"):
-            continue
-        raw_path = parser.get(section, "Path", fallback="")
-        if not raw_path:
-            continue
-        is_relative = parser.get(section, "IsRelative", fallback="1") == "1"
-        profile_path = root / raw_path if is_relative else Path(raw_path)
-        if fallback is None:
-            fallback = profile_path
-        if parser.get(section, "Default", fallback="0") == "1":
-            return profile_path
-    return fallback
-
-
-def is_zotero_running() -> bool:
-    if platform.system() == "Windows":
-        command = ["tasklist"]
-        try:
-            output = subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL)
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return "zotero.exe" in output.lower()
-
-    try:
-        subprocess.check_output(["pgrep", "-x", "Zotero"], stderr=subprocess.DEVNULL)
-        return True
-    except (OSError, subprocess.CalledProcessError):
-        return False
-
-
 def http_json(url: str, timeout: float = 1.0) -> tuple[bool, Any]:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
-            body = response.read().decode("utf-8", errors="replace")
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return True, json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
         return False, str(exc)
 
-    if not body:
-        return True, ""
-    try:
-        return True, json.loads(body)
-    except json.JSONDecodeError:
-        return True, body
 
-
-def quit_zotero(timeout: float = 45.0) -> bool:
-    """Ask Zotero to quit and wait for it to exit. macOS only."""
-    if platform.system() != "Darwin":
-        raise RuntimeError("Automatic restart is macOS-only; quit Zotero yourself and drop --restart.")
-    if not is_zotero_running():
-        return True
-
-    subprocess.run(["osascript", "-e", 'quit app "Zotero"'], check=False, capture_output=True)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not is_zotero_running():
-            return True
-        time.sleep(0.5)
-    return False
-
-
-def launch_zotero() -> None:
-    if platform.system() != "Darwin":
-        raise RuntimeError("Automatic restart is macOS-only; start Zotero yourself.")
-    subprocess.run(["open", "-a", "Zotero"], check=False)
-
-
-def wait_for_bridge(timeout: float = 90.0) -> str | None:
-    """Poll until the bridge answers. Plugin startup lags Zotero's by ~20s."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        ok, payload = http_json(BRIDGE_ENDPOINT)
-        if ok:
-            return _bridge_payload_version(payload) or "unknown"
-        time.sleep(2.0)
-    return None
-
-
-def run_doctor(no_network: bool = False) -> DoctorResult:
+def run_doctor() -> DoctorResult:
     version = package_version()
     xpi_path = bundled_xpi_path()
     bundled_version = bridge_version_from_xpi(xpi_path) if xpi_path else None
@@ -197,32 +101,6 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
             )
         )
 
-    profile = discover_default_profile()
-    if profile:
-        checks.append(CheckResult("Zotero profile", True, str(profile)))
-    else:
-        checks.append(
-            CheckResult(
-                "Zotero profile",
-                False,
-                "not found",
-                "Start Zotero once so it creates a profile.",
-            )
-        )
-
-    api_ok, api_payload = http_json(LOCAL_API_ENDPOINT)
-    if api_ok:
-        checks.append(CheckResult("Zotero local API", True, "ok"))
-    else:
-        checks.append(
-            CheckResult(
-                "Zotero local API",
-                False,
-                f"not reachable at {LOCAL_API_ENDPOINT}: {api_payload}",
-                "Start Zotero and enable extensions.zotero.httpServer.localAPI.enabled.",
-            )
-        )
-
     bridge_ok, bridge_payload = http_json(BRIDGE_ENDPOINT)
     installed_version = _bridge_payload_version(bridge_payload) if bridge_ok else None
     if bridge_ok:
@@ -236,7 +114,7 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
                     "zev-bridge",
                     False,
                     f"{detail}; bundled build is {bundled_version}",
-                    "Run `zev setup --install-profile --restart` to install the newer bridge.",
+                    "Run `zev setup` to install the newer bridge through Zotero’s Plugins window.",
                 )
             )
         else:
@@ -247,7 +125,7 @@ def run_doctor(no_network: bool = False) -> DoctorResult:
                 "zev-bridge",
                 False,
                 f"not reachable at {BRIDGE_ENDPOINT}: {bridge_payload}",
-                "Run `zev setup --install-profile --restart`.",
+                "Run `zev setup` for installation instructions.",
             )
         )
 
@@ -268,41 +146,6 @@ def format_doctor(result: DoctorResult) -> str:
             lines.append(f"Next: {check.action}")
     lines.append(f"Status: {'ready' if result.ready else 'setup incomplete'}")
     return "\n".join(lines)
-
-
-def is_addon_registered(profile_path: Path, addon_id: str = BRIDGE_ADDON_ID) -> bool:
-    """Whether Zotero already knows this addon id.
-
-    Zotero is Firefox-based, and Firefox no longer auto-installs sideloaded
-    XPIs (`extensions.autoDisableScopes` defaults to 15). Dropping a file into
-    `extensions/` therefore only works as an in-place upgrade of an addon that
-    is already registered; a brand new id must be installed through the UI.
-    """
-    try:
-        data = json.loads((profile_path / "extensions.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return any(addon.get("id") == addon_id for addon in data.get("addons", []))
-
-
-def install_bridge_into_profile(xpi_path: Path, profile_path: Path | None = None) -> Path:
-    if is_zotero_running():
-        raise RuntimeError("Zotero is running; quit Zotero before using --install-profile.")
-    if not xpi_path.is_file():
-        raise FileNotFoundError(f"XPI not found: {xpi_path}")
-
-    profile_path = profile_path or discover_default_profile()
-    if profile_path is None:
-        raise RuntimeError("No Zotero profile found.")
-
-    extensions_dir = profile_path / "extensions"
-    extensions_dir.mkdir(parents=True, exist_ok=True)
-    destination = extensions_dir / f"{BRIDGE_ADDON_ID}.xpi"
-    if destination.exists():
-        backup = destination.with_suffix(f".xpi.bak-{int(time.time())}")
-        shutil.copy2(destination, backup)
-    shutil.copy2(xpi_path, destination)
-    return destination
 
 
 def resolve_setup_xpi(xpi: str | None) -> Path:
@@ -358,6 +201,6 @@ def _version_key(version: str) -> tuple[tuple[int, int, str], ...]:
 
 def _bridge_payload_version(payload: Any) -> str | None:
     if isinstance(payload, dict):
-        version = payload.get("version") or payload.get("bridgeVersion")
+        version = payload.get("version")
         return str(version) if version else None
     return None
