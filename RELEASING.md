@@ -85,4 +85,6 @@ The hash should match the `update_hash` field in the update manifest.
 
 Zotero supports updating compatibility through the update manifest. If a future Zotero version only needs a compatibility bump, update `strict_max_version`, bump the bridge version, rebuild, and release the XPI/update manifest pair.
 
-Existing users with an old bridge whose `update_url` points to a missing feed may need one manual reinstall from the latest GitHub release. Once they install a bridge with the current update URL, future updates can flow through Zotero's plugin update mechanism.
+The bundled bridge points to this repository’s release update feed. Once a
+release is published, Zotero can discover it through its plugin update mechanism.
+The Python CLI must be upgraded separately.

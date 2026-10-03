@@ -30,7 +30,8 @@ Restart Zotero, then check the connection:
 zev doctor
 ```
 
-Keep Zotero running when using `zev eval`.
+Keep Zotero running when using `zev eval`. `zev setup` prints installation
+guidance for Zotero’s Plugins window.
 
 ### Upgrading
 

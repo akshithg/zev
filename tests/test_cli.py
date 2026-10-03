@@ -40,28 +40,55 @@ class CliMainTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("usage: zev", stderr.getvalue())
 
+    def test_download_only_prints_xpi_without_contacting_zotero(self):
+        stdout = io.StringIO()
+        with (
+            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
+            patch.object(cli.setup, "run_doctor") as doctor,
+            redirect_stdout(stdout),
+        ):
+            exit_code = cli.main(["setup", "--download-only"])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "/tmp/zev-bridge.xpi\n")
+        doctor.assert_not_called()
+
+    def test_setup_guides_installation_through_plugins_window(self):
+        result = cli.setup.DoctorResult(
+            checks=(cli.setup.CheckResult("zev-bridge", False, "not running"),),
+            package_version="1.2.3",
+            bundled_bridge_version="1.2.3",
+            installed_bridge_version=None,
+        )
+        stdout = io.StringIO()
+        with (
+            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
+            patch.object(cli.setup, "run_doctor", return_value=result),
+            redirect_stdout(stdout),
+        ):
+            exit_code = cli.main(["setup"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("/tmp/zev-bridge.xpi", stdout.getvalue())
+        self.assertIn("Open Zotero Tools -> Plugins", stdout.getvalue())
+        self.assertIn("Restart Zotero", stdout.getvalue())
+
     def test_setup_check_is_non_mutating(self):
         result = cli.setup.DoctorResult(
-            checks=(
-                cli.setup.CheckResult("Zotero local API", True, "ok"),
-                cli.setup.CheckResult("zev-bridge", True, "ok, version 1.2.3"),
-            ),
+            checks=(cli.setup.CheckResult("zev-bridge", True, "ok, version 1.2.3"),),
             package_version="1.2.3",
             bundled_bridge_version="1.2.3",
             installed_bridge_version="1.2.3",
         )
         stdout = io.StringIO()
         with (
-            patch.object(cli.setup, "resolve_setup_xpi"),
+            patch.object(cli.setup, "resolve_setup_xpi") as resolve_xpi,
             patch.object(cli.setup, "run_doctor", return_value=result),
-            patch.object(cli.setup, "install_bridge_into_profile") as install_mock,
             redirect_stdout(stdout),
         ):
             exit_code = cli.main(["setup", "--check"])
 
         self.assertEqual(exit_code, 0)
         self.assertIn("Status: ready", stdout.getvalue())
-        install_mock.assert_not_called()
+        resolve_xpi.assert_not_called()
 
 
 class EvalCommandTests(unittest.TestCase):
@@ -125,90 +152,3 @@ class EvalCommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class SetupRestartTests(unittest.TestCase):
-    def _doctor(self):
-        return cli.setup.DoctorResult(
-            checks=(cli.setup.CheckResult("zev-bridge", True, "ok"),),
-            package_version="0.1.0",
-            bundled_bridge_version="0.1.0",
-            installed_bridge_version="0.1.0",
-        )
-
-    def test_restart_quits_installs_launches_and_waits(self):
-        stdout = io.StringIO()
-        with (
-            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
-            patch.object(cli.setup, "discover_default_profile", return_value=None),
-            patch.object(cli.setup, "run_doctor", return_value=self._doctor()),
-            patch.object(cli.setup, "quit_zotero", return_value=True) as quit_mock,
-            patch.object(cli.setup, "install_bridge_into_profile", return_value="/p/zev-bridge@zev.dev.xpi") as inst,
-            patch.object(cli.setup, "launch_zotero") as launch,
-            patch.object(cli.setup, "wait_for_bridge", return_value="0.1.0"),
-            redirect_stdout(stdout),
-        ):
-            exit_code = cli.main(["setup", "--install-profile", "--restart"])
-
-        self.assertEqual(exit_code, 0)
-        quit_mock.assert_called_once()
-        inst.assert_called_once()
-        launch.assert_called_once()
-        self.assertIn("Bridge is up, version 0.1.0", stdout.getvalue())
-
-    def test_nothing_is_installed_when_zotero_refuses_to_quit(self):
-        stdout, stderr = io.StringIO(), io.StringIO()
-        with (
-            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
-            patch.object(cli.setup, "discover_default_profile", return_value=None),
-            patch.object(cli.setup, "run_doctor", return_value=self._doctor()),
-            patch.object(cli.setup, "quit_zotero", return_value=False),
-            patch.object(cli.setup, "install_bridge_into_profile") as inst,
-            patch.object(cli.setup, "launch_zotero") as launch,
-            redirect_stdout(stdout),
-            redirect_stderr(stderr),
-        ):
-            exit_code = cli.main(["setup", "--install-profile", "--restart"])
-
-        self.assertEqual(exit_code, 1)
-        inst.assert_not_called()
-        launch.assert_not_called()
-        self.assertIn("did not quit", stderr.getvalue())
-
-    def test_bridge_that_never_comes_up_is_reported(self):
-        stdout, stderr = io.StringIO(), io.StringIO()
-        with (
-            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
-            patch.object(cli.setup, "discover_default_profile", return_value=None),
-            patch.object(cli.setup, "run_doctor", return_value=self._doctor()),
-            patch.object(cli.setup, "quit_zotero", return_value=True),
-            patch.object(cli.setup, "install_bridge_into_profile", return_value="/p/x.xpi"),
-            patch.object(cli.setup, "launch_zotero"),
-            patch.object(cli.setup, "wait_for_bridge", return_value=None),
-            redirect_stdout(stdout),
-            redirect_stderr(stderr),
-        ):
-            exit_code = cli.main(["setup", "--install-profile", "--restart"])
-
-        self.assertEqual(exit_code, 1)
-        self.assertIn("did not come up", stderr.getvalue())
-
-    def test_unregistered_addon_is_refused_with_ui_instructions(self):
-        stderr = io.StringIO()
-        with (
-            patch.object(cli.setup, "resolve_setup_xpi", return_value="/tmp/zev-bridge.xpi"),
-            patch.object(cli.setup, "run_doctor", return_value=self._doctor()),
-            patch.object(cli.setup, "discover_default_profile", return_value="/p"),
-            patch.object(cli.setup, "is_addon_registered", return_value=False),
-            patch.object(cli.setup, "quit_zotero") as quit_mock,
-            patch.object(cli.setup, "install_bridge_into_profile") as inst,
-            redirect_stderr(stderr),
-        ):
-            exit_code = cli.main(["setup", "--install-profile", "--restart"])
-
-        # Nothing may be touched: quitting Zotero to perform an install that
-        # cannot work is worse than refusing up front.
-        self.assertEqual(exit_code, 1)
-        quit_mock.assert_not_called()
-        inst.assert_not_called()
-        self.assertIn("Install Add-on From File", stderr.getvalue())

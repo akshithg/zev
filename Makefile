@@ -1,18 +1,18 @@
 .PHONY: build release-build verify-build test clean
 
-PYTHON := $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else command -v python3; fi)
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else command -v python3; fi)
 XPI := zotero-plugin/dist/zev-bridge.xpi
 UPDATE_MANIFEST := zotero-plugin/dist/zev-bridge-updates.json
 
 build:
-	bash zotero-plugin/build.sh
+	$(PYTHON) scripts/build_zotero_plugin.py
 
 release-build:
 	test -n "$(RELEASE_TAG)"
-	bash zotero-plugin/build.sh --release-tag "$(RELEASE_TAG)" --require-release-tag-match
+	$(PYTHON) scripts/build_zotero_plugin.py --release-tag "$(RELEASE_TAG)"
 
 verify-build: build
-	git diff --exit-code -- $(XPI) $(UPDATE_MANIFEST) src/zev/assets/zev-bridge.xpi
+	git diff --exit-code -- src/zev/assets/zev-bridge.xpi
 
 test:
 	node --test tests/test_plugin_http.cjs

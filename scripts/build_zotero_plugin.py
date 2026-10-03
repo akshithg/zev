@@ -48,33 +48,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--release-tag",
-        default=os.environ.get("ZEV_RELEASE_TAG") or _github_ref_tag(),
+        default="",
         help="Release tag used in the update manifest. Defaults to v<manifest version>.",
-    )
-    parser.add_argument(
-        "--check-version-sync",
-        action="store_true",
-        help="Fail unless pyproject.toml and the bridge manifest use the same version.",
-    )
-    parser.add_argument(
-        "--require-release-tag-match",
-        action="store_true",
-        help="Fail unless --release-tag equals v<manifest version>.",
     )
     args = parser.parse_args()
 
-    manifest = _load_manifest()
+    manifest = json.loads(MANIFEST_PATH.read_text())
     bridge_version = str(manifest["version"])
     release_tag = args.release_tag or f"v{bridge_version}"
 
-    if args.check_version_sync:
-        project_version = _read_pyproject_version()
-        if project_version != bridge_version:
-            raise SystemExit(
-                f"pyproject.toml version {project_version!r} does not match Zotero bridge version {bridge_version!r}"
-            )
+    project_version = _read_pyproject_version()
+    if project_version != bridge_version:
+        raise SystemExit(
+            f"pyproject.toml version {project_version!r} does not match Zotero bridge version {bridge_version!r}"
+        )
 
-    if args.require_release_tag_match and release_tag != f"v{bridge_version}":
+    if release_tag != f"v{bridge_version}":
         raise SystemExit(f"release tag {release_tag!r} does not match bridge version v{bridge_version}")
 
     _validate_manifest(manifest)
@@ -85,7 +74,7 @@ def main() -> int:
     _write_xpi(xpi_path)
     BUNDLED_XPI_PATH.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(xpi_path, BUNDLED_XPI_PATH)
-    digest = _sha256(xpi_path)
+    digest = hashlib.sha256(xpi_path.read_bytes()).hexdigest()
     _write_update_manifest(
         update_manifest_path,
         manifest=manifest,
@@ -101,20 +90,6 @@ def main() -> int:
     print(f"Release tag: {release_tag}")
     print(f"XPI sha256: {digest}")
     return 0
-
-
-def _github_ref_tag() -> str:
-    if os.environ.get("GITHUB_REF_TYPE") == "tag":
-        return os.environ.get("GITHUB_REF_NAME", "")
-    ref = os.environ.get("GITHUB_REF", "")
-    prefix = "refs/tags/"
-    if ref.startswith(prefix):
-        return ref[len(prefix) :]
-    return ""
-
-
-def _load_manifest() -> dict[str, Any]:
-    return json.loads(MANIFEST_PATH.read_text())
 
 
 def _read_pyproject_version() -> str:
@@ -149,14 +124,6 @@ def _write_xpi(path: Path) -> None:
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, source.read_bytes())
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _write_update_manifest(

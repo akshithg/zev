@@ -9,7 +9,5 @@ description of the code and workflow.
 - Trashing a collection leaves its items in the library.
 - `collection.addItem()` requires a transaction. To add membership outside a
   transaction, use `item.addToCollection(id)` and `await item.saveTx()`.
-- Record metadata corrections as `bibtex:` blocks in versioned knowledge-vault
-  notes rather than automatically overwriting Zotero metadata.
 - Discuss changes to the bridge's security boundary with the maintainer before
   implementing them.

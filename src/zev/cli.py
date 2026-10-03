@@ -69,18 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show install guidance even when the bridge appears current.",
     )
     setup_parser.add_argument(
-        "--install-profile",
-        action="store_true",
-        help="Copy the XPI into the default Zotero profile. Zotero must be closed, or pass --restart.",
-    )
-    setup_parser.add_argument(
         "--xpi",
         help="Use a local zev-bridge.xpi instead of the bundled artifact.",
-    )
-    setup_parser.add_argument(
-        "--restart",
-        action="store_true",
-        help="Quit Zotero, install, relaunch, and wait for the bridge (macOS).",
     )
     return parser
 
@@ -122,6 +112,9 @@ def _run_doctor() -> int:
 
 
 def _run_setup(args: argparse.Namespace) -> int:
+    if args.check:
+        return _run_doctor()
+
     try:
         xpi_path = setup.resolve_setup_xpi(args.xpi)
     except FileNotFoundError as exc:
@@ -133,53 +126,6 @@ def _run_setup(args: argparse.Namespace) -> int:
         return 0
 
     result = setup.run_doctor()
-    if args.check:
-        print(setup.format_doctor(result))
-        return 0 if result.ready else 1
-
-    if args.install_profile:
-        profile = setup.discover_default_profile()
-        if profile is not None and not setup.is_addon_registered(profile):
-            print(
-                f"{setup.BRIDGE_ADDON_ID} is not registered with Zotero yet.\n"
-                "Copying the XPI into the profile only upgrades a plugin Zotero already knows;\n"
-                "Firefox-based apps do not auto-install sideloaded add-ons. Install it once via\n"
-                f"Zotero > Tools > Plugins > gear > Install Add-on From File:\n  {xpi_path}\n"
-                "After that, `--install-profile` will upgrade it in place.",
-                file=sys.stderr,
-            )
-            return 1
-
-        if args.restart:
-            try:
-                print("Quitting Zotero...")
-                if not setup.quit_zotero():
-                    print("Zotero did not quit; nothing was installed.", file=sys.stderr)
-                    return 1
-            except RuntimeError as exc:
-                print(str(exc), file=sys.stderr)
-                return 1
-
-        try:
-            destination = setup.install_bridge_into_profile(xpi_path)
-        except (FileNotFoundError, RuntimeError) as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        print(f"Installed zev-bridge to {destination}")
-
-        if not args.restart:
-            print("Restart Zotero, then run `zev doctor` to verify the bridge.")
-            return 0
-
-        print("Starting Zotero...")
-        setup.launch_zotero()
-        version = setup.wait_for_bridge()
-        if version is None:
-            print("Zotero started but the bridge did not come up; run `zev doctor`.", file=sys.stderr)
-            return 1
-        print(f"Bridge is up, version {version}")
-        return 0
-
     print(setup.setup_guidance(xpi_path, result, force=args.force))
     return 0 if result.ready else 1
 

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import io
 import zipfile
 from pathlib import Path
@@ -27,29 +26,19 @@ def main() -> int:
         except KeyError as exc:
             raise SystemExit(f"Wheel is missing {WHEEL_XPI_PATH}") from exc
 
-    if hashlib.sha256(xpi_bytes).hexdigest() != _sha256(SOURCE_XPI_PATH):
-        raise SystemExit("Wheel XPI hash does not match zotero-plugin/dist/zev-bridge.xpi")
+    if xpi_bytes != SOURCE_XPI_PATH.read_bytes():
+        raise SystemExit("Wheel XPI does not match zotero-plugin/dist/zev-bridge.xpi")
 
     with zipfile.ZipFile(io.BytesIO(xpi_bytes)) as xpi:
         names = set(xpi.namelist())
-    missing = {"manifest.json", "bootstrap.js", "LICENSE"} - names
-    if missing:
-        raise SystemExit(f"Bundled XPI is missing: {', '.join(sorted(missing))}")
-
-    with zipfile.ZipFile(io.BytesIO(xpi_bytes)) as xpi:
+        missing = {"manifest.json", "bootstrap.js", "LICENSE"} - names
+        if missing:
+            raise SystemExit(f"Bundled XPI is missing: {', '.join(sorted(missing))}")
         if xpi.read("LICENSE") != Path("LICENSE").read_bytes():
             raise SystemExit("Bundled XPI license does not match the repository LICENSE")
 
     print(f"Verified bundled XPI in {args.wheel}")
     return 0
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 if __name__ == "__main__":

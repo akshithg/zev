@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zev"
-version = "0.1.2"
+version = "0.1.3"
 description = "Evaluate JavaScript inside a running Zotero, for AI agents"
 requires-python = ">=3.10"
 dependencies = []
@@ -51,20 +51,9 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-# Line length is left to the formatter; embedded JS templates and tool
-# descriptions intentionally run past 120 where wrapping hurts readability.
+# Leave line length to the formatter.
 ignore = ["E501"]
 
 [tool.ty.environment]
 python-version = "3.10"
 root = ["./src"]
-
-# Tests use duck-typed mocks and reach into Optional module globals that are
-# non-None at runtime; type-check src strictly but relax those rules for tests.
-[[tool.ty.overrides]]
-include = ["tests/**"]
-
-[tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
-invalid-argument-type = "ignore"
-not-subscriptable = "ignore"
