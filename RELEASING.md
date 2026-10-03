@@ -1,11 +1,12 @@
 # Releasing zev
 
-This repository publishes two things from the same versioned release:
+Keep release artifacts on GitHub; do not publish this project to a package
+registry. GitHub Releases contain:
 
-- The Python package on PyPI
+- The Python wheel and source distribution
 - The Zotero bridge plugin as `zev-bridge.xpi`
 
-The Zotero bridge also publishes `zev-bridge-updates.json`, which is the update feed referenced by the XPI manifest. Zotero uses that JSON file to discover future bridge updates and compatibility changes.
+The release also includes `zev-bridge-updates.json`, which is the update feed referenced by the XPI manifest. Zotero uses that JSON file to discover future bridge updates and compatibility changes.
 
 ## Versioning
 
@@ -13,11 +14,8 @@ Keep the project version in `pyproject.toml` and the bridge version in `zotero-p
 
 Bump the version whenever bridge code, bridge compatibility, or Python package behavior changes. The bridge version must always increase when the XPI changes, because Zotero will not treat a same-version XPI as an upgrade.
 
-Use a tag that matches the version:
-
-```bash
-v0.2.2
-```
+Use a tag that matches the version. The examples below assume a release version
+of `0.2.2`; substitute the version being released.
 
 ## Build Artifacts
 
@@ -39,14 +37,15 @@ The update manifest includes:
 - the XPI sha256 digest
 - Zotero compatibility bounds from `zotero-plugin/manifest.json`
 
-Before committing a release prep change, run:
+Rebuild the bundled XPI with `make build` and include it in the release prep
+commit. After committing, verify the artifacts and run the tests:
 
 ```bash
 make verify-build
 make test
 ```
 
-CI also runs `make build` and fails if the committed XPI or update manifest is stale.
+CI also runs `make build` and fails if the committed bundled XPI is stale.
 
 ## GitHub Release
 
@@ -63,8 +62,8 @@ The release workflow:
 2. Verifies the tag matches the bridge version.
 3. Runs unit tests.
 4. Builds the Python wheel and sdist.
-5. Uploads `zev-bridge.xpi` and `zev-bridge-updates.json` to the GitHub release.
-6. Publishes the Python package to PyPI.
+5. Uploads the Python distributions, `zev-bridge.xpi`, and
+   `zev-bridge-updates.json` to the GitHub release.
 
 To test the tag guard locally before pushing a release tag:
 

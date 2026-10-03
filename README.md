@@ -27,8 +27,10 @@ never writes to it.
 
 ## Install
 
+Install directly from this GitHub repository:
+
 ```console
-uv tool install zev
+uv tool install git+https://github.com/akshithg/zev.git
 zev setup --download-only     # prints the bundled XPI path
 ```
 
@@ -59,7 +61,7 @@ zev doctor                # check Zotero and the bridge
 
 The plugin wraps your code in `(async () => { ... })()`, so send a **bare
 statement body ending in `return JSON.stringify(...)`**. Do not add your own
-wrapper — double-wrapping discards the return value and swallows errors.
+wrapper: an unawaited inner function can lose the return value and its errors.
 
 ```js
 const lib = Zotero.Libraries.userLibraryID;
@@ -70,7 +72,7 @@ return JSON.stringify({ok: true});
 ```
 
 Most of the Zotero API is async. `Zotero.Items.getAll()` returns a promise;
-forgetting `await` yields `undefined` rather than an error.
+use `await` before working with the returned items.
 
 ## Safety
 
@@ -115,4 +117,4 @@ What this fork changed: removed the search index, MCP server, citation tools,
 and canned mutation tools in favour of a single `eval` primitive; fixed UTF-8
 encoding in the bridge response path; added automated install-and-restart.
 
-Reading and analysis moved to a separate project, `ken`.
+Reading and analysis belong in the separate `corpus` project.
