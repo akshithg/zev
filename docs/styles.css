@@ -1,10 +1,26 @@
 :root {
+  color-scheme: light dark;
   --paper: #f5f4ee;
   --ink: #232821;
   --muted: #5d6359;
   --line: #d4d7cc;
   --green: #335b39;
   --code-paper: #edf0e8;
+  --keyword: #665238;
+  --button-hover: #24482a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #181c19;
+    --ink: #e3e7de;
+    --muted: #adb5a6;
+    --line: #3a4238;
+    --green: #a0c697;
+    --code-paper: #20261f;
+    --keyword: #d8bd95;
+    --button-hover: #bdd7b2;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -42,7 +58,7 @@ a:focus-visible {
   top: -70px;
   padding: 8px 16px;
   background: var(--ink);
-  color: white;
+  color: var(--paper);
   z-index: 10;
 }
 
@@ -114,7 +130,7 @@ h1 {
   text-decoration: none;
 }
 
-.button:hover { background: #24482a; }
+.button:hover { background: var(--button-hover); }
 
 .text-link { font-size: 13px; }
 
@@ -161,7 +177,7 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", m
 }
 
 .comment { color: var(--muted); }
-.keyword { color: #665238; }
+.keyword { color: var(--keyword); }
 .api,
 .string { color: var(--green); }
 
