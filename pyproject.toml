@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zev"
-version = "0.1.1"
+version = "0.1.2"
 description = "Evaluate JavaScript inside a running Zotero, for AI agents"
 requires-python = ">=3.10"
 dependencies = []

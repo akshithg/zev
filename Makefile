@@ -15,6 +15,7 @@ verify-build: build
 	git diff --exit-code -- $(XPI) $(UPDATE_MANIFEST) src/zev/assets/zev-bridge.xpi
 
 test:
+	node --test tests/test_plugin_http.cjs
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
 clean:
