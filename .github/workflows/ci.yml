@@ -14,7 +14,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install "ruff==0.15.1" "ty==0.0.17"
-      # Install the package so ty can resolve third-party imports (mcp, pyzotero, bm25s).
       - run: python -m pip install .
       - run: ruff check .
       - run: ruff format --check .
@@ -30,7 +29,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install build .
       - run: make build
-      - run: git diff --exit-code -- zotero-plugin/dist/zoty-bridge.xpi zotero-plugin/dist/zoty-bridge-updates.json src/zoty/assets/zoty-bridge.xpi
+      - run: git diff --exit-code -- zotero-plugin/dist/zev-bridge.xpi zotero-plugin/dist/zev-bridge-updates.json src/zev/assets/zev-bridge.xpi
       - run: python -m compileall src scripts tests
       - run: make test
       - run: python -m build --wheel

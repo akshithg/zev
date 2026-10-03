@@ -32,9 +32,13 @@ def main() -> int:
 
     with zipfile.ZipFile(io.BytesIO(xpi_bytes)) as xpi:
         names = set(xpi.namelist())
-    missing = {"manifest.json", "bootstrap.js"} - names
+    missing = {"manifest.json", "bootstrap.js", "LICENSE"} - names
     if missing:
         raise SystemExit(f"Bundled XPI is missing: {', '.join(sorted(missing))}")
+
+    with zipfile.ZipFile(io.BytesIO(xpi_bytes)) as xpi:
+        if xpi.read("LICENSE") != Path("LICENSE").read_bytes():
+            raise SystemExit("Bundled XPI license does not match the repository LICENSE")
 
     print(f"Verified bundled XPI in {args.wheel}")
     return 0
